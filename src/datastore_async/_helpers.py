@@ -1,6 +1,6 @@
 import contextvars
 
-_stack = contextvars.ContextVar("stack")
+_stack: contextvars.ContextVar[list] = contextvars.ContextVar("stack")
 
 
 class _LocalStack:
