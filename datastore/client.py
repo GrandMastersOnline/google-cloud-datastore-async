@@ -13,109 +13,26 @@
 # limitations under the License.
 """Convenience wrapper for invoking APIs/factories w/ a project."""
 
-import os
 import warnings
 
-import google.api_core.client_options
-from google.auth.credentials import AnonymousCredentials  # type: ignore
-from google.cloud._helpers import _determine_default_project as _base_default_project
-from google.cloud._helpers import _LocalStack
-from google.cloud.client import ClientWithProject
-
-from google.cloud.datastore import helpers
-from google.cloud.datastore._http import HTTPDatastoreAPI
-from google.cloud.datastore.aggregation import AggregationQuery
-from google.cloud.datastore.batch import Batch
+import google.api_core.retry_async
+import google.cloud.datastore_v1.services.datastore
+from google.cloud.datastore import Client, helpers
+from google.cloud.datastore.client import (
+    _MAX_LOOPS,
+    _RESERVE_IDS_DEPRECATED_MESSAGE,
+    _make_retry_timeout_kwargs,
+)
 from google.cloud.datastore.entity import Entity
-from google.cloud.datastore.key import Key
-from google.cloud.datastore.query import Query
-from google.cloud.datastore.transaction import Transaction
-from google.cloud.datastore.version import __version__
 
-try:
-    from google.cloud.datastore._gapic import make_datastore_api
-except ImportError:  # pragma: NO COVER
-    from google.api_core import client_info as api_core_client_info
-
-    def make_datastore_api(client):
-        raise RuntimeError("No gRPC available")
-
-    _HAVE_GRPC = False
-    _CLIENT_INFO = api_core_client_info.ClientInfo(client_library_version=__version__)
-else:
-    from google.api_core.gapic_v1 import client_info
-
-    _HAVE_GRPC = True
-    _CLIENT_INFO = client_info.ClientInfo(
-        client_library_version=__version__, gapic_version=__version__
-    )
+from ._helpers import _LocalStack
+from .aggregation import AsyncAggregationQuery
+from .batch import AsyncBatch
+from .query import AsyncQuery
+from .transaction import AsyncTransaction
 
 
-_MAX_LOOPS = 128
-"""Maximum number of iterations to wait for deferred keys."""
-_DATASTORE_BASE_URL = "https://datastore.googleapis.com"
-"""Datastore API request URL base."""
-
-DATASTORE_EMULATOR_HOST = "DATASTORE_EMULATOR_HOST"
-"""Environment variable defining host for datastore emulator server."""
-DATASTORE_DATASET = "DATASTORE_DATASET"
-"""Environment variable defining default dataset ID under GCD."""
-DISABLE_GRPC = "GOOGLE_CLOUD_DISABLE_GRPC"
-"""Environment variable acting as flag to disable gRPC."""
-
-_RESERVE_IDS_DEPRECATED_MESSAGE = """\
-Client.reserve_ids is deprecated. Please use \
-Client.reserve_ids_multi or Client.reserve_ids_sequential"""
-
-
-_USE_GRPC = _HAVE_GRPC and not os.getenv(DISABLE_GRPC, False)
-
-
-def _get_gcd_project():
-    """Gets the GCD application ID if it can be inferred."""
-    return os.getenv(DATASTORE_DATASET)
-
-
-def _determine_default_project(project=None):
-    """Determine default project explicitly or implicitly as fall-back.
-
-    In implicit case, supports four environments. In order of precedence, the
-    implicit environments are:
-
-    * DATASTORE_DATASET environment variable (for ``gcd`` / emulator testing)
-    * GOOGLE_CLOUD_PROJECT environment variable
-    * Google App Engine application ID
-    * Google Compute Engine project ID (from metadata server)
-
-    :type project: str
-    :param project: Optional. The project to use as default.
-
-    :rtype: str or ``NoneType``
-    :returns: Default project if it can be determined.
-    """
-    if project is None:
-        project = _get_gcd_project()
-
-    if project is None:
-        project = _base_default_project(project=project)
-
-    return project
-
-
-def _make_retry_timeout_kwargs(retry, timeout):
-    """Helper: make optional retry / timeout kwargs dict."""
-    kwargs = {}
-
-    if retry is not None:
-        kwargs["retry"] = retry
-
-    if timeout is not None:
-        kwargs["timeout"] = timeout
-
-    return kwargs
-
-
-def _extended_lookup(
+async def _extended_lookup(
     datastore_api,
     project,
     key_pbs,
@@ -195,6 +112,9 @@ def _extended_lookup(
     if deferred is not None and deferred != []:
         raise ValueError("deferred must be None or an empty list")
 
+    if not retry:
+        retry = google.api_core.retry_async.AsyncRetry()
+
     kwargs = _make_retry_timeout_kwargs(retry, timeout)
 
     results = []
@@ -215,7 +135,7 @@ def _extended_lookup(
             "read_options": read_options,
         }
         helpers.set_database_id_to_request(request, database)
-        lookup_response = datastore_api.lookup(
+        lookup_response = await datastore_api.lookup(
             request=request,
             **kwargs,
         )
@@ -244,7 +164,7 @@ def _extended_lookup(
     return results
 
 
-class Client(ClientWithProject):
+class AsyncClient(Client):
     """Convenience wrapper for invoking APIs/factories w/ a project.
 
     .. doctest::
@@ -301,135 +221,15 @@ class Client(ClientWithProject):
     SCOPE = ("https://www.googleapis.com/auth/datastore",)
     """The scopes required for authenticating as a Cloud Datastore consumer."""
 
-    def __init__(
-        self,
-        project=None,
-        namespace=None,
-        credentials=None,
-        client_info=_CLIENT_INFO,
-        client_options=None,
-        database=None,
-        _http=None,
-        _use_grpc=None,
-    ):
-        emulator_host = os.getenv(DATASTORE_EMULATOR_HOST)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
-        if emulator_host is not None:
-            if credentials is not None:
-                raise ValueError(
-                    "Explicit credentials are incompatible with the emulator"
-                )
-            credentials = AnonymousCredentials()
-
-        super(Client, self).__init__(
-            project=project,
-            credentials=credentials,
-            client_options=client_options,
-            _http=_http,
-        )
-        self.namespace = namespace
-        self._client_info = client_info
-        self._client_options = client_options
         self._batch_stack = _LocalStack()
-        self._datastore_api_internal = None
-        self._database = database
+        self._datastore_api_async = (
+            google.cloud.datastore_v1.services.datastore.DatastoreAsyncClient()
+        )
 
-        if _use_grpc is None:
-            self._use_grpc = _USE_GRPC
-        else:
-            self._use_grpc = _use_grpc
-
-        if emulator_host is not None:
-            self._base_url = "http://" + emulator_host
-        else:
-            api_endpoint = _DATASTORE_BASE_URL
-            if client_options:
-                if isinstance(client_options, dict):
-                    client_options = google.api_core.client_options.from_dict(
-                        client_options
-                    )
-                if client_options.api_endpoint:
-                    api_endpoint = client_options.api_endpoint
-            self._base_url = api_endpoint
-
-    @staticmethod
-    def _determine_default(project):
-        """Helper:  override default project detection."""
-        return _determine_default_project(project)
-
-    @property
-    def base_url(self):
-        """Getter for API base URL."""
-        return self._base_url
-
-    @base_url.setter
-    def base_url(self, value):
-        """Setter for API base URL."""
-        self._base_url = value
-
-    @property
-    def database(self):
-        """Getter for database"""
-        return self._database
-
-    @property
-    def _datastore_api(self):
-        """Getter for a wrapped API object."""
-        if self._datastore_api_internal is None:
-            if self._use_grpc:
-                self._datastore_api_internal = make_datastore_api(self)
-            else:
-                self._datastore_api_internal = HTTPDatastoreAPI(self)
-        return self._datastore_api_internal
-
-    def _push_batch(self, batch):
-        """Push a batch/transaction onto our stack.
-
-        "Protected", intended for use by batch / transaction context mgrs.
-
-        :type batch: :class:`google.cloud.datastore.batch.Batch`, or an object
-                     implementing its API.
-        :param batch: newly-active batch/transaction.
-        """
-        self._batch_stack.push(batch)
-
-    def _pop_batch(self):
-        """Pop a batch/transaction from our stack.
-
-        "Protected", intended for use by batch / transaction context mgrs.
-
-        :raises: IndexError if the stack is empty.
-        :rtype: :class:`google.cloud.datastore.batch.Batch`, or an object
-                 implementing its API.
-        :returns: the top-most batch/transaction, after removing it.
-        """
-        return self._batch_stack.pop()
-
-    @property
-    def current_batch(self):
-        """Currently-active batch, if within the scope of a Batch context manager.
-
-        :rtype: :class:`google.cloud.datastore.batch.Batch`, or an object
-                implementing its API, or ``NoneType`` (if no batch is active).
-        :returns: The batch/transaction at the top of the batch stack.
-        """
-        return self._batch_stack.top
-
-    @property
-    def current_transaction(self):
-        """Currently-active transaction, if within the scope of a Transaction
-        context manager.
-
-        :rtype: :class:`google.cloud.datastore.transaction.Transaction`, or an
-                object implementing its API, or ``NoneType`` (if no transaction
-                is active).
-        :returns: The transaction at the top of the batch stack.
-        """
-        transaction = self.current_batch
-        if isinstance(transaction, Transaction):
-            return transaction
-
-    def get(
+    async def get_async(
         self,
         key,
         missing=None,
@@ -493,7 +293,7 @@ class Client(ClientWithProject):
         :raises: :class:`ValueError` if more than one of ``eventual==True``,
             ``transaction``, and ``read_time`` is specified.
         """
-        entities = self.get_multi(
+        entities = await self.get_multi_async(
             keys=[key],
             missing=missing,
             deferred=deferred,
@@ -506,7 +306,7 @@ class Client(ClientWithProject):
         if entities:
             return entities[0]
 
-    def get_multi(
+    async def get_multi_async(
         self,
         keys,
         missing=None,
@@ -574,8 +374,8 @@ class Client(ClientWithProject):
         if transaction is None:
             transaction = self.current_transaction
 
-        entity_pbs = _extended_lookup(
-            datastore_api=self._datastore_api,
+        entity_pbs = await _extended_lookup(
+            datastore_api=self._datastore_api_async,
             project=self.project,
             key_pbs=[key.to_protobuf() for key in keys],
             eventual=eventual,
@@ -600,7 +400,7 @@ class Client(ClientWithProject):
 
         return [helpers.entity_from_protobuf(entity_pb._pb) for entity_pb in entity_pbs]
 
-    def put(self, entity, retry=None, timeout=None):
+    async def put_async(self, entity, retry=None, timeout=None):
         """Save an entity in the Cloud Datastore.
 
         .. note::
@@ -625,9 +425,9 @@ class Client(ClientWithProject):
             to each individual attempt.  Only meaningful outside of another
             batch / transaction.
         """
-        self.put_multi(entities=[entity], retry=retry, timeout=timeout)
+        await self.put_multi_async(entities=[entity], retry=retry, timeout=timeout)
 
-    def put_multi(self, entities, retry=None, timeout=None):
+    async def put_multi_async(self, entities, retry=None, timeout=None):
         """Save entities in the Cloud Datastore.
 
         :type entities: list of :class:`google.cloud.datastore.entity.Entity`
@@ -659,15 +459,15 @@ class Client(ClientWithProject):
 
         if not in_batch:
             current = self.batch()
-            current.begin()
+            await current.begin_async()
 
         for entity in entities:
             current.put(entity)
 
         if not in_batch:
-            current.commit(retry=retry, timeout=timeout)
+            await current.commit_async(retry=retry, timeout=timeout)
 
-    def delete(self, key, retry=None, timeout=None):
+    async def delete_async(self, key, retry=None, timeout=None):
         """Delete the key in the Cloud Datastore.
 
         .. note::
@@ -693,9 +493,9 @@ class Client(ClientWithProject):
             to each individual attempt.  Only meaningful outside of another
             batch / transaction.
         """
-        self.delete_multi(keys=[key], retry=retry, timeout=timeout)
+        await self.delete_multi_async(keys=[key], retry=retry, timeout=timeout)
 
-    def delete_multi(self, keys, retry=None, timeout=None):
+    async def delete_multi_async(self, keys, retry=None, timeout=None):
         """Delete keys from the Cloud Datastore.
 
         :type keys: list of :class:`google.cloud.datastore.key.Key`, :class:`google.cloud.datastore.entity.Entity`
@@ -723,7 +523,7 @@ class Client(ClientWithProject):
 
         if not in_batch:
             current = self.batch()
-            current.begin()
+            await current.begin_async()
 
         for key in keys:
             if isinstance(key, Entity):
@@ -732,9 +532,11 @@ class Client(ClientWithProject):
             current.delete(key)
 
         if not in_batch:
-            current.commit(retry=retry, timeout=timeout)
+            await current.commit_async(retry=retry, timeout=timeout)
 
-    def allocate_ids(self, incomplete_key, num_ids, retry=None, timeout=None):
+    async def allocate_ids_async(
+        self, incomplete_key, num_ids, retry=None, timeout=None
+    ):
         """Allocate a list of IDs from a partial key.
 
         :type incomplete_key: :class:`google.cloud.datastore.key.Key`
@@ -773,7 +575,7 @@ class Client(ClientWithProject):
             "keys": incomplete_key_pbs,
         }
         helpers.set_database_id_to_request(request, self.database)
-        response_pb = self._datastore_api.allocate_ids(
+        response_pb = await self._datastore_api_async.allocate_ids(
             request=request,
             **kwargs,
         )
@@ -784,35 +586,16 @@ class Client(ClientWithProject):
             incomplete_key.completed_key(allocated_id) for allocated_id in allocated_ids
         ]
 
-    def key(self, *path_args, **kwargs):
-        """Proxy to :class:`google.cloud.datastore.key.Key`.
-
-        Passes our ``project`` and our ``database``.
-        """
-        if "project" in kwargs:
-            raise TypeError("Cannot pass project")
-        kwargs["project"] = self.project
-        if "database" in kwargs:
-            raise TypeError("Cannot pass database")
-        kwargs["database"] = self.database
-        if "namespace" not in kwargs:
-            kwargs["namespace"] = self.namespace
-        return Key(*path_args, **kwargs)
-
-    def entity(self, key=None, exclude_from_indexes=()):
-        """Proxy to :class:`google.cloud.datastore.entity.Entity`."""
-        return Entity(key=key, exclude_from_indexes=exclude_from_indexes)
-
     def batch(self):
         """Proxy to :class:`google.cloud.datastore.batch.Batch`."""
-        return Batch(self)
+        return AsyncBatch(self)
 
     def transaction(self, **kwargs):
         """Proxy to :class:`google.cloud.datastore.transaction.Transaction`.
 
         :param kwargs: Keyword arguments to be passed in.
         """
-        return Transaction(self, **kwargs)
+        return AsyncTransaction(self, **kwargs)
 
     def query(self, **kwargs):
         """Proxy to :class:`google.cloud.datastore.query.Query`.
@@ -874,7 +657,7 @@ class Client(ClientWithProject):
         kwargs["project"] = self.project
         if "namespace" not in kwargs:
             kwargs["namespace"] = self.namespace
-        return Query(self, **kwargs)
+        return AsyncQuery(self, **kwargs)
 
     def aggregation_query(self, query, **kwargs):
         """Proxy to :class:`google.cloud.datastore.aggregation.AggregationQuery`.
@@ -954,9 +737,11 @@ class Client(ClientWithProject):
         :rtype: :class:`~google.cloud.datastore.aggregation.AggregationQuery`
         :returns: An AggregationQuery object.
         """
-        return AggregationQuery(self, query, **kwargs)
+        return AsyncAggregationQuery(self, query, **kwargs)
 
-    def reserve_ids_sequential(self, complete_key, num_ids, retry=None, timeout=None):
+    async def reserve_ids_sequential_async(
+        self, complete_key, num_ids, retry=None, timeout=None
+    ):
         """Reserve a list of IDs sequentially from a complete key.
 
         This will reserve the key passed as `complete_key` as well as
@@ -1018,13 +803,13 @@ class Client(ClientWithProject):
             "keys": key_pbs,
         }
         helpers.set_database_id_to_request(request, self.database)
-        self._datastore_api.reserve_ids(
+        await self._datastore_api_async.reserve_ids(
             request=request,
             **kwargs,
         )
         return None
 
-    def reserve_ids(self, complete_key, num_ids, retry=None, timeout=None):
+    async def reserve_ids_async(self, complete_key, num_ids, retry=None, timeout=None):
         """Reserve a list of IDs sequentially from a complete key.
 
         DEPRECATED. Alias for :meth:`reserve_ids_sequential`.
@@ -1033,11 +818,11 @@ class Client(ClientWithProject):
         :meth:`reserve_ids_sequential`.
         """
         warnings.warn(_RESERVE_IDS_DEPRECATED_MESSAGE, DeprecationWarning)
-        return self.reserve_ids_sequential(
+        return await self.reserve_ids_sequential_async(
             complete_key, num_ids, retry=retry, timeout=timeout
         )
 
-    def reserve_ids_multi(self, complete_keys, retry=None, timeout=None):
+    async def reserve_ids_multi_async(self, complete_keys, retry=None, timeout=None):
         """Reserve IDs from a list of complete keys.
 
         :type complete_keys: `list` of :class:`google.cloud.datastore.key.Key`
@@ -1072,7 +857,7 @@ class Client(ClientWithProject):
         }
         helpers.set_database_id_to_request(request, complete_keys[0].database)
 
-        self._datastore_api.reserve_ids(
+        await self._datastore_api_async.reserve_ids(
             request=request,
             **kwargs,
         )
