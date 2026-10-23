@@ -1,0 +1,29 @@
+[build-system]
+requires = ["hatchling >= 1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "datastore-async"
+authors = [
+  { name="Tomasz Żyźniewski", email="zyzniewski@gmail.com" },
+]
+description = "Google Cloud Datastore Async Client"
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+dependencies = [
+    "google-cloud-datastore == 2.27.*",
+]
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://github.com/GrandMastersOnline/google-cloud-datastore-async"
+Issues = "https://github.com/GrandMastersOnline/google-cloud-datastore-async/issues"
+
+[tool.hatch.version]
+path = "src/datastore_async/version.py"
