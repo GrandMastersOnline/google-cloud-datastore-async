@@ -42,6 +42,26 @@ jobs:
           path: dist/
           if-no-files-found: error
 
+  unit-tests:
+    name: Unit tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14", "3.15"]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install nox
+        run: python -m pip install --upgrade nox
+
+      - name: Run unit tests
+        run: nox -s "unit-${{ matrix.python-version }}"
+
   smoke-test:
     name: Install and import (Python ${{ matrix.python-version }})
     needs: build
@@ -68,7 +88,7 @@ jobs:
   pypi-publish:
     name: Upload release to PyPI
     if: github.event_name == 'release'
-    needs: [build, smoke-test]
+    needs: [build, unit-tests, smoke-test]
     runs-on: ubuntu-latest
     environment:
       name: pypi
