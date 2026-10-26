@@ -226,7 +226,9 @@ class AsyncClient(Client):
 
         self._batch_stack = _LocalStack()
         self._datastore_api_async = (
-            google.cloud.datastore_v1.services.datastore.DatastoreAsyncClient()
+            google.cloud.datastore_v1.services.datastore.DatastoreAsyncClient(
+                credentials=self._credentials,
+            )
         )
 
     async def get_async(
