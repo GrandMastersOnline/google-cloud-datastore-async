@@ -20,7 +20,7 @@ from google.cloud.datastore.helpers import set_database_id_to_request
 
 @pytest.mark.parametrize("database_id", [None, "somedb"])
 def test_transaction_ctor_defaults(database_id):
-    from google.cloud.datastore.transaction import Transaction
+    from datastore_async.transaction import AsyncTransaction
 
     project = "PROJECT"
     client = _Client(project, database=database_id)
@@ -31,7 +31,7 @@ def test_transaction_ctor_defaults(database_id):
     assert xact.database == database_id
     assert xact._client is client
     assert xact.id is None
-    assert xact._status == Transaction._INITIAL
+    assert xact._status == AsyncTransaction._INITIAL
     assert xact._mutations == []
     assert len(xact._partial_key_entities) == 0
 
@@ -661,9 +661,9 @@ def _make_options(read_only=False, previous_transaction=None, read_time=None):
 
 
 def _make_transaction(client, **kw):
-    from google.cloud.datastore.transaction import Transaction
+    from datastore_async.transaction import AsyncTransaction
 
-    return Transaction(client, **kw)
+    return AsyncTransaction(client, **kw)
 
 
 def _make_begin_request(project, read_only=False, read_time=None, database=None):

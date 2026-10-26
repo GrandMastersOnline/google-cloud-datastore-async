@@ -455,11 +455,11 @@ def test_iterator__next_page_in_transaction():
 
 
 def test_iterator__next_page_no_more():
-    from google.cloud.datastore.query import Query
+    from datastore_async.query import AsyncQuery
 
     ds_api = _make_datastore_api_for_aggregation()
     client = _Client(None, datastore_api=ds_api)
-    query = Query(client)
+    query = AsyncQuery(client)
 
     iterator = _make_aggregation_iterator(query, client)
     iterator._more_results = False

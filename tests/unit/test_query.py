@@ -22,8 +22,9 @@ from google.cloud.datastore.query import (
     BaseCompositeFilter,
     Or,
     PropertyFilter,
-    Query,
 )
+
+from datastore_async.query import AsyncQuery
 
 _PROJECT = "PROJECT"
 
@@ -361,11 +362,11 @@ def test_query_add_property_filter___key__valid_key(database_id):
 
 @pytest.mark.parametrize("database_id", [None, "somedb"])
 def test_query_add_filter_return_query_obj(database_id):
-    from google.cloud.datastore.query import Query
+    from datastore_async.query import AsyncQuery
 
     query = _make_query(_make_client(database=database_id))
     query_obj = query.add_filter("firstname", "=", "John")
-    assert isinstance(query_obj, Query)
+    assert isinstance(query_obj, AsyncQuery)
     assert query_obj.filters == [("firstname", "=", "John")]
 
 
@@ -607,14 +608,14 @@ def test_query_distinct_on_multiple_calls(database_id):
 
 @pytest.mark.parametrize("database_id", [None, "somedb"])
 def test_query_fetch_defaults_w_client_attr(database_id):
-    from google.cloud.datastore.query import Iterator
+    from datastore_async.query import AsyncIterator
 
     client = _make_client(database=database_id)
     query = _make_query(client)
 
     iterator = query.fetch()
 
-    assert isinstance(iterator, Iterator)
+    assert isinstance(iterator, AsyncIterator)
     assert iterator._query is query
     assert iterator.client is client
     assert iterator.max_results is None
@@ -625,7 +626,7 @@ def test_query_fetch_defaults_w_client_attr(database_id):
 
 @pytest.mark.parametrize("database_id", [None, "somedb"])
 def test_query_fetch_w_explicit_client_w_retry_w_timeout(database_id):
-    from google.cloud.datastore.query import Iterator
+    from datastore_async.query import AsyncIterator
 
     client = _make_client(database=database_id)
     other_client = _make_client(database=database_id)
@@ -637,7 +638,7 @@ def test_query_fetch_w_explicit_client_w_retry_w_timeout(database_id):
         limit=7, offset=8, client=other_client, retry=retry, timeout=timeout
     )
 
-    assert isinstance(iterator, Iterator)
+    assert isinstance(iterator, AsyncIterator)
     assert iterator._query is query
     assert iterator.client is other_client
     assert iterator.max_results == 7
@@ -794,11 +795,12 @@ def test_iterator_constructor_explicit():
 
 
 def test_iterator__build_protobuf_empty():
-    from google.cloud.datastore.query import Query
     from google.cloud.datastore_v1.types import query as query_pb2
 
+    from datastore_async.query import AsyncQuery
+
     client = _Client(None)
-    query = Query(client)
+    query = AsyncQuery(client)
     iterator = _make_iterator(query, client)
 
     pb = iterator._build_protobuf()
@@ -810,11 +812,12 @@ def test_iterator__build_protobuf_all_values_except_offset():
     # this test and the following (all_values_except_start_and_end_cursor)
     # test mutually exclusive states; the offset is ignored
     # if a start_cursor is supplied
-    from google.cloud.datastore.query import Query
     from google.cloud.datastore_v1.types import query as query_pb2
 
+    from datastore_async.query import AsyncQuery
+
     client = _Client(None)
-    query = Query(client)
+    query = AsyncQuery(client)
     limit = 15
     start_bytes = b"i\xb7\x1d"
     start_cursor = "abcd"
@@ -837,11 +840,12 @@ def test_iterator__build_protobuf_all_values_except_start_and_end_cursor():
     # this test and the previous (all_values_except_start_offset)
     # test mutually exclusive states; the offset is ignored
     # if a start_cursor is supplied
-    from google.cloud.datastore.query import Query
     from google.cloud.datastore_v1.types import query as query_pb2
 
+    from datastore_async.query import AsyncQuery
+
     client = _Client(None)
-    query = Query(client)
+    query = AsyncQuery(client)
     limit = 15
     offset = 9
     iterator = _make_iterator(query, client, limit=limit, offset=offset)
@@ -912,12 +916,12 @@ def _next_page_helper(
     txn_id=None, retry=None, timeout=None, read_time=None, database=None
 ):
     from google.api_core import page_iterator
-    from google.protobuf.timestamp_pb2 import Timestamp
-
-    from google.cloud.datastore.query import Query
     from google.cloud.datastore_v1.types import datastore as datastore_pb2
     from google.cloud.datastore_v1.types import entity as entity_pb2
     from google.cloud.datastore_v1.types import query as query_pb2
+    from google.protobuf.timestamp_pb2 import Timestamp
+
+    from datastore_async.query import AsyncQuery
 
     more_enum = query_pb2.QueryResultBatch.MoreResultsType.NOT_FINISHED
     result = _make_query_response([], b"", more_enum, 0)
@@ -933,7 +937,7 @@ def _next_page_helper(
             project, database=database, datastore_api=ds_api, transaction=transaction
         )
 
-    query = Query(client)
+    query = AsyncQuery(client)
     kwargs = {}
 
     if retry is not None:
@@ -1005,11 +1009,11 @@ def test_iterator__next_page_w_read_time(database_id):
 
 @pytest.mark.parametrize("database_id", [None, "somedb"])
 def test_iterator__next_page_no_more(database_id):
-    from google.cloud.datastore.query import Query
+    from datastore_async.query import AsyncQuery
 
     ds_api = _make_datastore_api()
     client = _Client(None, datastore_api=ds_api)
-    query = Query(client)
+    query = AsyncQuery(client)
     iterator = _make_iterator(query, client)
     iterator._more_results = False
 
@@ -1022,11 +1026,11 @@ def test_iterator__next_page_no_more(database_id):
 @pytest.mark.parametrize("skipped_cursor_1", [b"DEADBEEF", b""])
 def test_iterator__next_page_w_skipped_lt_offset(skipped_cursor_1, database_id):
     from google.api_core import page_iterator
-
-    from google.cloud.datastore.query import Query
     from google.cloud.datastore_v1.types import datastore as datastore_pb2
     from google.cloud.datastore_v1.types import entity as entity_pb2
     from google.cloud.datastore_v1.types import query as query_pb2
+
+    from datastore_async.query import AsyncQuery
 
     project = "prujekt"
     skipped_1 = 100
@@ -1045,7 +1049,7 @@ def test_iterator__next_page_w_skipped_lt_offset(skipped_cursor_1, database_id):
     ds_api = _make_datastore_api(result_1, result_2)
     client = _Client(project, datastore_api=ds_api, database=database_id)
 
-    query = Query(client)
+    query = AsyncQuery(client)
     offset = 150
     iterator = _make_iterator(query, client, offset=offset)
 
@@ -1086,7 +1090,7 @@ def test_iterator_sends_explain_options_w_request(database_id, analyze):
     ds_api = _make_datastore_api(response_pb)
     client = _Client(None, datastore_api=ds_api)
     explain_options = ExplainOptions(analyze=analyze)
-    query = Query(client, explain_options=explain_options)
+    query = AsyncQuery(client, explain_options=explain_options)
     iterator = _make_iterator(query, client)
     iterator._next_page()
     # ensure explain_options is set in request
@@ -1119,7 +1123,7 @@ def test_iterator_explain_metrics(database_id):
     response_pb.explain_metrics = expected_metrics
     ds_api = _make_datastore_api(response_pb)
     client = _Client(None, datastore_api=ds_api)
-    query = Query(client)
+    query = AsyncQuery(client)
     iterator = _make_iterator(query, client)
     assert iterator._explain_metrics is None
     iterator._next_page()
@@ -1138,7 +1142,7 @@ def test_iterator_explain_metrics_no_explain(database_id):
 
     ds_api = _make_datastore_api()
     client = _Client(None, datastore_api=ds_api)
-    query = Query(client, explain_options=None)
+    query = AsyncQuery(client, explain_options=None)
     iterator = _make_iterator(query, client)
     assert iterator._explain_metrics is None
     with pytest.raises(QueryExplainError) as exc:
@@ -1175,7 +1179,7 @@ def test_iterator_explain_metrics_no_analyze_make_call(database_id):
     ds_api = _make_datastore_api(response_pb)
     client = _Client(None, datastore_api=ds_api)
     explain_options = ExplainOptions(analyze=False)
-    query = Query(client, explain_options=explain_options)
+    query = AsyncQuery(client, explain_options=explain_options)
     iterator = _make_iterator(query, client)
     assert ds_api.run_query.call_count == 0
     metrics = iterator.explain_metrics
@@ -1199,7 +1203,7 @@ def test_iterator_explain_metrics_no_analyze_make_call_failed(database_id):
     ds_api = _make_datastore_api(response_pb)
     client = _Client(None, datastore_api=ds_api)
     explain_options = ExplainOptions(analyze=False)
-    query = Query(client, explain_options=explain_options)
+    query = AsyncQuery(client, explain_options=explain_options)
     iterator = _make_iterator(query, client)
     assert ds_api.run_query.call_count == 0
     with pytest.raises(QueryExplainError):
@@ -1354,7 +1358,7 @@ def test_pb_from_complex_filter():
     filter_1 = filter.filters[0].property_filter
     assert filter_1.property.name == "name"
     assert filter_1.value.string_value == "John"
-    assert filter_1.op == Query.OPERATORS.get("=")
+    assert filter_1.op == AsyncQuery.OPERATORS.get("=")
 
     filter_2 = filter.filters[1].composite_filter
     assert len(filter_2.filters) == 2
@@ -1362,12 +1366,12 @@ def test_pb_from_complex_filter():
 
     filter_2_1 = filter_2.filters[0].property_filter
     assert filter_2_1.property.name == "category"
-    assert filter_2_1.op == Query.OPERATORS.get("=")
+    assert filter_2_1.op == AsyncQuery.OPERATORS.get("=")
     assert filter_2_1.value.string_value == "Grocery"
 
     filter_2_2 = filter_2.filters[1].property_filter
     assert filter_2_2.property.name == "price"
-    assert filter_2_2.op == Query.OPERATORS.get(">")
+    assert filter_2_2.op == AsyncQuery.OPERATORS.get(">")
     assert filter_2_2.value.string_value == "100"
 
     filter_3 = filter.filters[2].composite_filter
@@ -1376,18 +1380,18 @@ def test_pb_from_complex_filter():
 
     filter_3_1 = filter_3.filters[0].property_filter
     assert filter_3_1.property.name == "category"
-    assert filter_3_1.op == Query.OPERATORS.get("=")
+    assert filter_3_1.op == AsyncQuery.OPERATORS.get("=")
     assert filter_3_1.value.string_value == "Stationery"
 
     filter_3_2 = filter_3.filters[1].property_filter
     assert filter_3_2.property.name == "price"
-    assert filter_3_2.op == Query.OPERATORS.get("<")
+    assert filter_3_2.op == AsyncQuery.OPERATORS.get("<")
     assert filter_3_2.value.string_value == "50"
 
     filter_4 = filter.filters[3].property_filter
     assert filter_4.property.name == "name"
     assert filter_4.value.string_value == "Jana"
-    assert filter_4.op == Query.OPERATORS.get("=")
+    assert filter_4.op == AsyncQuery.OPERATORS.get("=")
 
 
 def test_build_pb_for_and():
@@ -1456,7 +1460,7 @@ def _make_stub_query(
     order=(),
     distinct_on=(),
 ):
-    query = Query(
+    query = AsyncQuery(
         client,
         kind=kind,
         project=project,
@@ -1491,15 +1495,15 @@ class _Client(object):
 
 
 def _make_query(*args, **kw):
-    from google.cloud.datastore.query import Query
+    from datastore_async.query import AsyncQuery
 
-    return Query(*args, **kw)
+    return AsyncQuery(*args, **kw)
 
 
 def _make_iterator(*args, **kw):
-    from google.cloud.datastore.query import Iterator
+    from datastore_async.query import AsyncIterator
 
-    return Iterator(*args, **kw)
+    return AsyncIterator(*args, **kw)
 
 
 def _make_client(database=None):

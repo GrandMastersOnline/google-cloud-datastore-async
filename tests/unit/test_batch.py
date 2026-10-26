@@ -21,9 +21,9 @@ from google.cloud.datastore.helpers import set_database_id_to_request
 
 
 def _make_batch(client):
-    from google.cloud.datastore.batch import Batch
+    from datastore_async.batch import AsyncBatch
 
-    return Batch(client)
+    return AsyncBatch(client)
 
 
 @pytest.mark.parametrize("database_id", [None, "somedb"])
@@ -506,9 +506,9 @@ def test_batch_as_context_mgr_w_error(database_id):
 
 
 def test_batch_as_context_mgr_w_enter_fails():
-    from google.cloud.datastore.batch import Batch
+    from datastore_async.batch import AsyncBatch
 
-    class FailedBegin(Batch):
+    class FailedBegin(AsyncBatch):
         def begin(self):
             raise RuntimeError
 

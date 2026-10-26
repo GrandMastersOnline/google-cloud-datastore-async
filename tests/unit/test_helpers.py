@@ -632,11 +632,12 @@ def test__get_transaction_options_w_id():
     """
     test with transaction with id set
     """
-    from google.cloud.datastore import Transaction
     from google.cloud.datastore.helpers import get_transaction_options
 
+    from datastore_async.transaction import AsyncTransaction
+
     expected_id = b"123abc"
-    txn = Transaction(None, begin_later=True)
+    txn = AsyncTransaction(None, begin_later=True)
     txn._id = expected_id
     t_id, new_t = get_transaction_options(txn)
     assert t_id == expected_id
@@ -647,10 +648,11 @@ def test__get_transaction_options_w_begin_later():
     """
     if begin later is set and it hasn't begun, should return new_transaction_options
     """
-    from google.cloud.datastore import Transaction
     from google.cloud.datastore.helpers import get_transaction_options
 
-    txn = Transaction(None, begin_later=True)
+    from datastore_async.transaction import AsyncTransaction
+
+    txn = AsyncTransaction(None, begin_later=True)
     t_id, new_t = get_transaction_options(txn)
     assert t_id is None
     assert new_t is txn._options
@@ -660,10 +662,11 @@ def test__get_transaction_options_not_started():
     """
     If the transaction is noet set as begin_later, but it hasn't begun, return None for both
     """
-    from google.cloud.datastore import Transaction
     from google.cloud.datastore.helpers import get_transaction_options
 
-    txn = Transaction(None, begin_later=False)
+    from datastore_async.transaction import AsyncTransaction
+
+    txn = AsyncTransaction(None, begin_later=False)
     t_id, new_t = get_transaction_options(txn)
     assert t_id is None
     assert new_t is None

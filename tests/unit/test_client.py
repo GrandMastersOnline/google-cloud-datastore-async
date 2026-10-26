@@ -102,9 +102,9 @@ def _make_client(
     _use_grpc=None,
     database="",
 ):
-    from google.cloud.datastore.client import Client
+    from datastore_async.client import AsyncClient
 
-    return Client(
+    return AsyncClient(
         project=project,
         database=database,
         namespace=namespace,
@@ -131,7 +131,9 @@ def test_client_ctor_w_project_no_environ():
 @pytest.mark.parametrize("database_id", [None, "somedb"])
 @mock.patch.dict(os.environ, clear=True)
 def test_client_ctor_w_implicit_inputs(database_id):
-    from google.cloud.datastore.client import _CLIENT_INFO, _DATASTORE_BASE_URL, Client
+    from google.cloud.datastore.client import _CLIENT_INFO, _DATASTORE_BASE_URL
+
+    from datastore_async.client import AsyncClient
 
     other = "other"
     patch1 = mock.patch(
@@ -144,7 +146,7 @@ def test_client_ctor_w_implicit_inputs(database_id):
 
     with patch1 as _determine_default_project:
         with patch2 as default:
-            client = Client(database=database_id)
+            client = AsyncClient(database=database_id)
 
     assert client.project == other
     assert client.database == database_id
@@ -159,7 +161,7 @@ def test_client_ctor_w_implicit_inputs(database_id):
     assert client.current_transaction is None
 
     default.assert_called_once_with(
-        scopes=Client.SCOPE,
+        scopes=AsyncClient.SCOPE,
     )
     _determine_default_project.assert_called_once_with(None)
 
@@ -1551,7 +1553,7 @@ def test_client_batch():
     creds = _make_credentials()
     client = _make_client(credentials=creds)
 
-    patch = mock.patch("google.cloud.datastore.client.Batch", spec=["__call__"])
+    patch = mock.patch("datastore_async.client.AsyncBatch", spec=["__call__"])
     with patch as mock_klass:
         batch = client.batch()
         assert batch is mock_klass.return_value
@@ -1562,7 +1564,7 @@ def test_client_transaction_w_defaults():
     creds = _make_credentials()
     client = _make_client(credentials=creds)
 
-    patch = mock.patch("google.cloud.datastore.client.Transaction", spec=["__call__"])
+    patch = mock.patch("datastore_async.client.AsyncTransaction", spec=["__call__"])
     with patch as mock_klass:
         xact = client.transaction()
         assert xact is mock_klass.return_value
@@ -1609,7 +1611,7 @@ def test_client_query_w_defaults(database_id):
     creds = _make_credentials()
     client = _make_client(credentials=creds, database=database_id)
 
-    patch = mock.patch("google.cloud.datastore.client.Query", spec=["__call__"])
+    patch = mock.patch("datastore_async.client.AsyncQuery", spec=["__call__"])
     with patch as mock_klass:
         query = client.query()
         assert query is mock_klass.return_value
@@ -1629,7 +1631,7 @@ def test_client_query_w_explicit(database_id):
     creds = _make_credentials()
     client = _make_client(credentials=creds, database=database_id)
 
-    patch = mock.patch("google.cloud.datastore.client.Query", spec=["__call__"])
+    patch = mock.patch("datastore_async.client.AsyncQuery", spec=["__call__"])
     with patch as mock_klass:
         query = client.query(
             kind=kind,
@@ -1662,7 +1664,7 @@ def test_client_query_w_namespace(database_id):
     creds = _make_credentials()
     client = _make_client(namespace=namespace, credentials=creds, database=database_id)
 
-    patch = mock.patch("google.cloud.datastore.client.Query", spec=["__call__"])
+    patch = mock.patch("datastore_async.client.AsyncQuery", spec=["__call__"])
     with patch as mock_klass:
         query = client.query(kind=kind)
         assert query is mock_klass.return_value
@@ -1680,7 +1682,7 @@ def test_client_query_w_namespace_collision(database_id):
     creds = _make_credentials()
     client = _make_client(namespace=namespace1, credentials=creds, database=database_id)
 
-    patch = mock.patch("google.cloud.datastore.client.Query", spec=["__call__"])
+    patch = mock.patch("datastore_async.client.AsyncQuery", spec=["__call__"])
     with patch as mock_klass:
         query = client.query(kind=kind, namespace=namespace2)
         assert query is mock_klass.return_value
@@ -1695,7 +1697,7 @@ def test_client_aggregation_query_w_defaults(database_id):
     client = _make_client(credentials=creds, database=database_id)
     query = client.query()
     patch = mock.patch(
-        "google.cloud.datastore.client.AggregationQuery", spec=["__call__"]
+        "datastore_async.client.AsyncAggregationQuery", spec=["__call__"]
     )
     with patch as mock_klass:
         aggregation_query = client.aggregation_query(query=query)
